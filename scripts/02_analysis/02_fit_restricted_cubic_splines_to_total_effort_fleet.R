@@ -26,7 +26,7 @@ reg_panel_fleet <- readRDS(here("data", "processed", "total_hours_regression_pan
 
 ## PROCESSING ##################################################################
 
-mods <- reg_panel_fleet %>%
+mods_fleet <- reg_panel_fleet %>%
   group_by(fleet, prepost) %>%
   nest() %>%
   expand_grid(knots = c(3:9)) %>%
@@ -37,7 +37,7 @@ mods <- reg_panel_fleet %>%
                                    panel.id = ~lockdown + event))) %>%
   ungroup()
 
-mods %>%
+mods_fleet %>%
   mutate(summary = map(mod, broom::glance)) %>%
   select(-c(data, mod)) %>%
   unnest(summary) %>%
@@ -49,7 +49,7 @@ mods %>%
   select(fleet, prepost, knots, adj.r.squared, sigma, nobs, contains("AIC"))
 
 # X ----------------------------------------------------------------------------
-best_mod_fleet <- mods %>%
+best_mod_fleet <- mods_fleet %>%
   mutate(summary = map(mod, broom::glance)) %>%
   unnest(summary) %>%
   group_by(fleet, prepost) %>%
@@ -61,7 +61,7 @@ best_mod_fleet <- mods %>%
          X_mat = map(mod, model.matrix),
          se_fit_hac = map2(X_mat, v_hac, ~sqrt(rowSums((.x %*% .y) * .x))))
 
-pred_data <- best_mod_fleet %>%
+pred_data_fleet <- best_mod_fleet %>%
   select(fleet, prepost, data, fit, se_fit_hac) %>%
   unnest(cols = c(data, fit, se_fit_hac)) %>%
   mutate(lwr_hac = fit - se_fit_hac,
@@ -70,5 +70,5 @@ pred_data <- best_mod_fleet %>%
 ## EXPORT ######################################################################
 
 # X ----------------------------------------------------------------------------
-saveRDS(obj = pred_data,
-        file = here("data", "output", "restricted_cubic_splite_fitted_to_total_effort.rds"))
+saveRDS(obj = pred_data_fleet,
+        file = here("data", "output", "restricted_cubic_splite_fitted_to_total_effort_fleet.rds"))
