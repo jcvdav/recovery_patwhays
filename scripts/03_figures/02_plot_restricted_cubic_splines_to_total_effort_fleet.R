@@ -29,30 +29,34 @@ return_date <- pred_data %>%
          prepost == "post",
          event > 7,
          fit >= 0) %>%
-  pull(yday) %>%
-  min()
-
-duration <- return_date - 82
+  group_by(fleet) %>%
+  summarize(return_date = min(yday)) %>%
+  ungroup() %>%
+  mutate(duration = return_date - 82)
 
 missing_effort <- pred_data %>%
   filter(grp == "Diff",
          prepost == "post") %>%
   mutate(fit = -1 * fit) %>%
-  pull(fit) %>%
-  sum()
+  group_by(fleet) %>%
+  summarize(missing_effort = sum(fit))
 
-missing_effort / duration
+combined <- return_date %>%
+  left_join(missing_effort, by = "fleet") %>%
+  mutate(mean_missing = missing_effort / duration)
 
 ## VISUALIZE ###################################################################
 
 # X ----------------------------------------------------------------------------
-ggplot(data = pred_data, aes(x = yday,
-                             y = fit,
-                             group = paste(lockdown, prepost),
-                             color = lockdown,
-                             fill = lockdown)) +
+ggplot(data = pred_data,
+       aes(x = yday,
+           y = fit,
+           group = paste(lockdown, prepost),
+           color = lockdown,
+           fill = lockdown)) +
   geom_ribbon(
     data = . %>%
+      left_join(combined, by = "fleet") %>%
       filter(grp == "Diff",
              yday >= 82,
              yday <= return_date),
@@ -62,7 +66,7 @@ ggplot(data = pred_data, aes(x = yday,
     alpha = 0.5) +
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_vline(xintercept = 82, linetype = "dashed") +
-  geom_vline(xintercept = return_date, linetype = "dashed") +
+  geom_vline(data = combined, aes(xintercept = return_date), linetype = "dashed") +
   geom_errorbar(aes(ymin = hours_hp - hours_hp_sd,
                     ymax = hours_hp + hours_hp_sd),
                 linewidth = 0.1,
@@ -74,11 +78,10 @@ ggplot(data = pred_data, aes(x = yday,
              alpha = 0.5) +
   geom_line() +
   theme_bw() +
-  facet_wrap(~grp, ncol = 1, scales = "free_y") +
+  facet_wrap(fleet ~ grp, ncol = 2, scales = "free_y") +
   scale_y_continuous(expand = c(0, 0)) +
   scale_x_continuous(breaks = seq(1, 213, by = 14),
-                     labels = seq(1, 213, by = 14)) +
-  theme(strip.text = element_blank())
+                     labels = seq(1, 213, by = 14))
 
 ## EXPORT ######################################################################
 
