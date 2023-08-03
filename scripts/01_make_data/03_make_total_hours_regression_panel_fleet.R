@@ -41,7 +41,7 @@ mex_vms_local_fleets <- mex_vms_local %>%
   filter(in_fleet == 1) %>%
   select(-in_fleet)
 
-# Chet to make sure that the pivoting didn't fuck things up and we still have same number of rows
+# Check to make sure that the pivoting didn't fuck things up and we still have same number of rows
 # identical(dim(mex_vms_local)[1], dim(mex_vms_local_fleets)[1])
 
 # Uncomment to check number of vessels per group
