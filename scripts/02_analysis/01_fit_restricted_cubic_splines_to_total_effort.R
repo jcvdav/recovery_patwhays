@@ -31,7 +31,7 @@ mods <- reg_panel %>%
   nest() %>%
   expand_grid(knots = c(3:9)) %>%
   mutate(#knots = ifelse(prepost == "pre", pre_knot, post_knot),
-         mod = map2(data, knots, ~feols(hours ~ lockdown*rcs(event, .y),
+         mod = map2(data, knots, ~feols(hours_hp ~ lockdown*rcs(event, .y),
                                         data = .x,
                                         vcov = "NW",
                                         panel.id = ~lockdown + event))) %>%
@@ -50,12 +50,12 @@ mods %>%
 
 # X ----------------------------------------------------------------------------
 best_mod <- mods %>%
-  mutate(knots = ifelse(prepost == "pre", 8, 9),
-         mod = map2(data, knots, ~feols(hours ~ lockdown*rcs(event, .y),
-                                        data = .x,
-                                        vcov = "NW",
-                                        panel.id = ~lockdown + event)),
-         fit = map(mod, predict),
+  mutate(summary = map(mod, broom::glance)) %>%
+  unnest(summary) %>%
+  group_by(prepost) %>%
+  filter(AIC == min(AIC)) %>%
+  ungroup() %>%
+  mutate(fit = map(mod, predict),
          # v_hac = map(mod, ~NeweyWest(.x, prewhite = FALSE, lag = 60)),
          v_hac = map(mod, vcov),
          X_mat = map(mod, model.matrix),
