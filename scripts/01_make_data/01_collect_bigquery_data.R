@@ -39,13 +39,14 @@ mex_fisheries <- dbConnect(
 # Build two tables with info we need -------------------------------------------
 # A table of vessel characteristics
 vessel_info <- tbl(mex_fisheries, "vessel_info_v_20221104") %>%
-  filter(sql("engine_power_hp IS NOT NULL")) %>%
+  filter(sql("engine_power_hp IS NOT NULL"),
+         sql("sardine IS NOT NULL AND shrimp IS NOT NULL AND tuna IS NOT NULL AND others IS NOT NULL")) %>%
   select(vessel_rnpa, tuna, sardine, shrimp, others, state, contains("vesse"), engine_power_hp)
 
 # A table of vessel activity
 mex_vms <- tbl(mex_fisheries, "mex_vms_processed_v_20230419") %>%
   filter(speed > 0,
-         year >= 2018) %>%
+         between(year, 2019, 2022))  %>%
   mutate(date = sql("EXTRACT(DATE FROM datetime)")) %>%
   group_by(date, vessel_rnpa) %>%
   summarize(hours = sum(hours, na.rm = T))
