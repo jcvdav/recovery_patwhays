@@ -21,24 +21,34 @@ pacman::p_load(
 )
 
 # Load data --------------------------------------------------------------------
-mex_vms_local <- readRDS(file = here("data", "raw", "daily_activity_by_vessel.rds"))
+mex_vms <- readRDS(file = here("data", "raw", "daily_activity_by_vessel.rds"))
+vessel_info <- readRDS(file = here("data", "processed", "clean_vessel_info.rds"))
 
 ## PROCESSING ##################################################################
 
-# Build an aggregate data set --------------------------------------------------
-total_local <- mex_vms_local %>%
+# Number of vessels
+mex_vms %>%
+  inner_join(vessel_info, by = "vessel_rnpa") %>%
+  pull(vessel_rnpa) %>%
+  unique() %>%
+  length()
+
+total_species_group_local <- mex_vms %>%
+  inner_join(vessel_info, by = "vessel_rnpa") %>%
   group_by(year) %>%
   mutate(n_vessels = n_distinct(vessel_rnpa)) %>%
   ungroup() %>%
-  group_by(date, yday, year, month, n_vessels) %>%
+  group_by(species_group, date, yday, year, month, n_vessels) %>%
   summarize(hours = sum(hours, na.rm = T),
-            hours_hp = sum(hours * engine_power_hp)) %>%
+            kwh = sum(hours * engine_power_kw, na.rm = T)) %>%
   ungroup() %>%
+  replace_na(replace = list(hours = 0,
+                            kwh = 0)) %>%
   mutate(norm_hours = hours / n_vessels,
-         norm_hours_hp = hours_hp / n_vessels)
+         norm_kwh = kwh / n_vessels)
 
 # Data for the "treated" (2020) and "control" (all others)
-tc_reg_data <- total_local %>%
+tc_reg_data_species_group <- total_species_group_local %>%
   filter(between(yday, 0, 213)) %>% # Keep Jan1 to Jul 31
   mutate(event = as.numeric(yday - lubridate::yday("2020-03-23")),
          lockdown = ifelse(year == 2020, "Yes", "No"),
@@ -46,28 +56,31 @@ tc_reg_data <- total_local %>%
          prepost = ifelse(event < 0, "pre", "post"),
          prepost = fct_relevel(prepost, "pre", "post"),
          grp = "TC") %>%
-  group_by(event, yday, lockdown, prepost, grp) %>%
+  group_by(species_group, event, yday, lockdown, prepost, grp) %>%
   summarize(hours_sd = sd(hours, na.rm = T),
             hours = mean(hours, na.rm = T),
-            hours_hp_sd = sd(hours_hp, na.rm = T),
-            hours_hp = mean(hours_hp, na.tm = T)) %>%
-  ungroup()
+            kwh_sd = sd(kwh, na.rm = T),
+            kwh = mean(kwh, na.tm = T)) %>%
+  ungroup() %>%
+  replace_na(replace = list(hours = 0,
+                            kwh = 0))
 
-dif_reg_data <- tc_reg_data %>%
+dif_reg_data_species_group <- tc_reg_data_species_group %>%
   select(-contains("sd")) %>%
-  pivot_wider(names_from = lockdown, values_from = c(hours, hours_hp)) %>%
+  pivot_wider(names_from = lockdown,
+              values_from = c(hours, kwh), values_fill = 0) %>%
   mutate(hours = hours_Yes - hours_No,
-         hours_hp = hours_hp_Yes - hours_hp_No,
+         kwh = kwh_Yes - kwh_No,
          lockdown = "Difference",
          grp = "Diff") %>%
-  select(event, yday, lockdown, prepost, hours, hours_hp, grp)
+  select(species_group, event, yday, lockdown, prepost, hours, kwh, grp)
 
-total_reg_data <- bind_rows(tc_reg_data, dif_reg_data) %>%
+total_reg_data_species_group <- bind_rows(tc_reg_data_species_group, dif_reg_data_species_group) %>%
   mutate(grp = fct_relevel(grp, "TC", "Diff"),
          lockdown = fct_relevel(lockdown, "No", "Yes", "Difference"))
 
 ## EXPORT ######################################################################
 
 # X ----------------------------------------------------------------------------
-saveRDS(object = total_reg_data,
-        file = here("data", "processed", "total_hours_regression_panel.rds"))
+saveRDS(object = total_reg_data_species_group,
+        file = here("data", "processed", "total_hours_regression_panel_species_group.rds"))

@@ -21,48 +21,28 @@ pacman::p_load(
 )
 
 # Load data --------------------------------------------------------------------
-mex_vms_local <- readRDS(file = here("data", "raw", "daily_activity_by_vessel.rds"))
+mex_vms <- readRDS(file = here("data", "raw", "daily_activity_by_vessel.rds"))
+vessel_info <- readRDS(file = here("data", "processed", "clean_vessel_info.rds"))
 
 ## PROCESSING ##################################################################
 
-# Uncoment to check number of vessels with more than one permit
-# mex_vms_local %>%
-#   select(vessel_rnpa, sardine, shrimp, tuna, others) %>%
-#   distinct() %>%
-#   count(sardine, shrimp, tuna, others)
-
 # Build an aggregate data set --------------------------------------------------
-mex_vms_local_fleets <- mex_vms_local %>%
-  mutate(others = ifelse((sardine == 1 & tuna == 1) | (shrimp == 1 & tuna == 1), 1, others),
-         tuna = ifelse(others == 1, 0, tuna),
-         sardine = ifelse(others == 1, 0, sardine),
-         shrimp = ifelse(others == 1, 0, shrimp)) %>%
-  pivot_longer(cols = c(sardine, shrimp, tuna, others), names_to = "fleet", values_to = "in_fleet") %>%
-  filter(in_fleet == 1) %>%
-  select(-in_fleet)
-
-# Check to make sure that the pivoting didn't fuck things up and we still have same number of rows
-# identical(dim(mex_vms_local)[1], dim(mex_vms_local_fleets)[1])
-
-# Uncomment to check number of vessels per group
-# mex_vms_local_fleets %>%
-#   select(vessel_rnpa, sardine, shrimp, tuna, others) %>%
-#   distinct() %>%
-#   count(sardine, shrimp, tuna, others)
-
-total_fleet_local <- mex_vms_local_fleets %>%
+total_local <- mex_vms %>%
+  inner_join(vessel_info, by = "vessel_rnpa") %>%
   group_by(year) %>%
   mutate(n_vessels = n_distinct(vessel_rnpa)) %>%
   ungroup() %>%
-  group_by(fleet, date, yday, year, month, n_vessels) %>%
+  group_by(date, yday, year, month, n_vessels) %>%
   summarize(hours = sum(hours, na.rm = T),
-            hours_hp = sum(hours * engine_power_hp)) %>%
+            kwh = sum(hours * engine_power_kw, na.rm = T)) %>%
   ungroup() %>%
+  replace_na(replace = list(hours = 0,
+                            kwh = 0)) %>%
   mutate(norm_hours = hours / n_vessels,
-         norm_hours_hp = hours_hp / n_vessels)
+         norm_kwh = kwh / n_vessels)
 
 # Data for the "treated" (2020) and "control" (all others)
-tc_reg_data_fleet <- total_fleet_local %>%
+tc_reg_data <- total_local %>%
   filter(between(yday, 0, 213)) %>% # Keep Jan1 to Jul 31
   mutate(event = as.numeric(yday - lubridate::yday("2020-03-23")),
          lockdown = ifelse(year == 2020, "Yes", "No"),
@@ -70,28 +50,28 @@ tc_reg_data_fleet <- total_fleet_local %>%
          prepost = ifelse(event < 0, "pre", "post"),
          prepost = fct_relevel(prepost, "pre", "post"),
          grp = "TC") %>%
-  group_by(fleet, event, yday, lockdown, prepost, grp) %>%
+  group_by(event, yday, lockdown, prepost, grp) %>%
   summarize(hours_sd = sd(hours, na.rm = T),
             hours = mean(hours, na.rm = T),
-            hours_hp_sd = sd(hours_hp, na.rm = T),
-            hours_hp = mean(hours_hp, na.tm = T)) %>%
+            kwh_sd = sd(kwh, na.rm = T),
+            kwh = mean(kwh, na.tm = T)) %>%
   ungroup()
 
-dif_reg_data_fleet <- tc_reg_data_fleet %>%
+dif_reg_data <- tc_reg_data %>%
   select(-contains("sd")) %>%
-  pivot_wider(names_from = lockdown, values_from = c(hours, hours_hp)) %>%
+  pivot_wider(names_from = lockdown, values_from = c(hours, kwh)) %>%
   mutate(hours = hours_Yes - hours_No,
-         hours_hp = hours_hp_Yes - hours_hp_No,
+         kwh = kwh_Yes - kwh_No,
          lockdown = "Difference",
          grp = "Diff") %>%
-  select(fleet, event, yday, lockdown, prepost, hours, hours_hp, grp)
+  select(event, yday, lockdown, prepost, hours, kwh, grp)
 
-total_reg_data_fleet <- bind_rows(tc_reg_data_fleet, dif_reg_data_fleet) %>%
+total_reg_data <- bind_rows(tc_reg_data, dif_reg_data) %>%
   mutate(grp = fct_relevel(grp, "TC", "Diff"),
          lockdown = fct_relevel(lockdown, "No", "Yes", "Difference"))
 
 ## EXPORT ######################################################################
 
 # X ----------------------------------------------------------------------------
-saveRDS(object = total_reg_data_fleet,
-        file = here("data", "processed", "total_hours_regression_panel_fleet.rds"))
+saveRDS(object = total_reg_data,
+        file = here("data", "processed", "total_hours_regression_panel.rds"))

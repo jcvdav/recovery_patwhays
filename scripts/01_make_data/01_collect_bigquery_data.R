@@ -38,25 +38,26 @@ mex_fisheries <- dbConnect(
 
 # Build two tables with info we need -------------------------------------------
 # A table of vessel characteristics
-vessel_info <- tbl(mex_fisheries, "vessel_info_v_20221104") %>%
+vessel_info <- tbl(mex_fisheries, "vessel_info_v_20230803") %>%
   filter(sql("engine_power_hp IS NOT NULL"),
-         sql("sardine IS NOT NULL AND shrimp IS NOT NULL AND tuna IS NOT NULL AND others IS NOT NULL")) %>%
-  select(vessel_rnpa, tuna, sardine, shrimp, others, state, contains("vesse"), engine_power_hp)
+         !owner_name == "INSTITUTO NACIONAL DE PESCA",
+         fleet == "large scale") %>%
+  select(vessel_rnpa, finfish, sardine, shark, shrimp, tuna, others, state, contains("vesse"), engine_power_kw)
 
 # A table of vessel activity
 mex_vms <- tbl(mex_fisheries, "mex_vms_processed_v_20230419") %>%
   filter(speed > 0,
-         between(year, 2019, 2022))  %>%
+         between(year, 2018, 2022))  %>%
   mutate(date = sql("EXTRACT(DATE FROM datetime)")) %>%
   group_by(date, vessel_rnpa) %>%
   summarize(hours = sum(hours, na.rm = T))
 
 # Collect the data -------------------------------------------------------------
-combined <- inner_join(mex_vms, vessel_info, by = "vessel_rnpa") %>%
-  collect()
+vessel_info_local <- collect(vessel_info)
 
 # Generate additional variables in-memory
-mex_vms_local <- combined %>%
+mex_vms_local <- mex_vms %>%
+  collect() %>%
   mutate(yday = yday(date),
          month = month(date),
          year = year(date),
@@ -68,3 +69,5 @@ mex_vms_local <- combined %>%
 # X ----------------------------------------------------------------------------
 saveRDS(object = mex_vms_local,
         file = here("data", "raw", "daily_activity_by_vessel.rds"))
+saveRDS(object = vessel_info_local,
+        file = here("data", "raw", "mex_vessel_info.rds"))

@@ -19,7 +19,7 @@ pacman::p_load(
 )
 
 # Load data --------------------------------------------------------------------
-pred_data <- readRDS(file = here("data", "output", "restricted_cubic_splite_fitted_to_total_effort.rds"))
+pred_data <- readRDS(file = here("data", "output", "restricted_cubic_spline_fitted_to_total_effort.rds"))
 
 ## PROCESSING ##################################################################
 
@@ -63,13 +63,13 @@ ggplot(data = pred_data, aes(x = yday,
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_vline(xintercept = 82, linetype = "dashed") +
   geom_vline(xintercept = return_date, linetype = "dashed") +
-  geom_errorbar(aes(ymin = hours_hp - hours_hp_sd,
-                    ymax = hours_hp + hours_hp_sd),
+  geom_errorbar(aes(ymin = kwh - kwh_sd,
+                    ymax = kwh + kwh_sd),
                 linewidth = 0.1,
                 color = "black",
                 width = 0) +
   geom_ribbon(aes(ymin = lwr_hac, ymax = upr_hac), alpha = 0.25) +
-  geom_point(aes(y = hours_hp),
+  geom_point(aes(y = kwh),
              size = 1,
              alpha = 0.5) +
   geom_line() +

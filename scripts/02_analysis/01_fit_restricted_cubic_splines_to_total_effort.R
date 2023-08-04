@@ -31,7 +31,7 @@ mods <- reg_panel %>%
   nest() %>%
   expand_grid(knots = c(3:9)) %>%
   mutate(#knots = ifelse(prepost == "pre", pre_knot, post_knot),
-         mod = map2(data, knots, ~feols(hours_hp ~ lockdown*rcs(event, .y),
+         mod = map2(data, knots, ~feols(kwh ~ lockdown*rcs(event, .y),
                                         data = .x,
                                         vcov = "NW",
                                         panel.id = ~lockdown + event))) %>%
@@ -72,4 +72,4 @@ pred_data <- best_mod %>%
 
 # X ----------------------------------------------------------------------------
 saveRDS(obj = pred_data,
-        file = here("data", "output", "restricted_cubic_splite_fitted_to_total_effort.rds"))
+        file = here("data", "output", "restricted_cubic_spline_fitted_to_total_effort.rds"))
